@@ -1,0 +1,52 @@
+#!/bin/bash
+display_usage() {
+echo "
+anrp - Amend New Relic Policy [version 1.0]
+
+Usage: anrp [options]
+Example: anrp -a -A [apikey] -p [poliyname] -s [servername]
+
+  -a    add server to new relic policy
+  -d    delete server to new relic policy
+  -A    new relic administrator api key
+  -p    new relic policy filter
+  -s    server hostname to be displayed
+  -h    display this help and exit
+"
+}
+
+# if less than four arguments supplied, display usage
+if [  $# -le 4 ]; then display_usage
+    exit 1
+fi
+# check whether user had supplied -h or --help . If yes display usage
+if [[ ( $# == "--help") ||  $# == "-h" ]]; then display_usage
+    exit 0
+fi
+
+while getopts 'adA:p:s:' flag; do
+  case "${flag}" in
+    a) add='true' ;;
+    d) delete='true' ;;
+    A) api_key="${OPTARG}" ;;
+    p) policy_filter="${OPTARG}" ;;
+    s) server_filter="${OPTARG}" ;;
+    *) error "Unexpected option ${flag}" ;;
+  esac
+done
+
+policy_id=$(curl -X GET "https://api.newrelic.com/v2/alerts_policies.json" -H "X-Api-Key:$api_key" -s -G -d "filter[name]=$policy_filter" | jq  '.policies[] | .id')
+entity_id=$(curl -X GET "https://api.newrelic.com/v2/servers.json" -H "X-Api-Key:$api_key" -s -G -d "filter[name]=$server_filter" | jq '.servers[] | .id')
+condition_id=$(curl -X GET "https://api.newrelic.com/v2/alerts_conditions.json" -H "X-Api-Key:$api_key" -s -G -d "policy_id=$policy_id" | jq '.conditions[] | .id')
+
+if [ "$add" == "true" ]; then
+    for i in $condition_id; do
+        curl -X PUT "https://api.newrelic.com/v2/alerts_entity_conditions/$entity_id.json" -H "X-Api-Key:$api_key" -H "Content-Type: application/json" -s -G -d "entity_type=Server&condition_id=$i"
+    done
+elif [ "$delete" == "true" ]; then
+    for i in $condition_id; do
+        curl -X DELETE "https://api.newrelic.com/v2/alerts_entity_conditions/$entity_id.json" -H "X-Api-Key:$api_key" -s -G -d "entity_type=Server&condition_id=$i"
+    done
+else
+    echo "nothing to report"
+fi
