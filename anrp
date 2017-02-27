@@ -7,22 +7,37 @@ Usage: anrp [options]
 Example: anrp -a -A [apikey] -p [poliyname] -s [servername]
 
   -a    add server to new relic policy
-  -d    delete server to new relic policy
+  -d    delete server from new relic policy
   -A    new relic administrator api key
   -p    new relic policy filter
   -s    server hostname to be displayed
+  -z    remove all zombie servers
   -h    display this help and exit
 "
 }
 
+function jumpto
+{
+    label=$1
+    cmd=$(sed -n "/$label:/{:a;n;p;ba};" $0 | grep -v ':$')
+    eval "$cmd"
+    exit
+}
+
+# if -z is selected skip initial checks
+if [ $# == "-z" ]; then 
+    jumpto continue
+fi
 # if less than four arguments supplied, display usage
-if [  $# -le 4 ]; then display_usage
+if [ $# -le 4 ]; then display_usage
     exit 1
 fi
-# check whether user had supplied -h or --help . If yes display usage
-if [[ ( $# == "--help") ||  $# == "-h" ]]; then display_usage
+# check whether user had supplied -h, if yes display usage
+if [ $# == "-h" ]; then display_usage
     exit 0
 fi
+
+continue:
 
 while getopts 'adA:p:s:' flag; do
   case "${flag}" in
@@ -31,6 +46,7 @@ while getopts 'adA:p:s:' flag; do
     A) api_key="${OPTARG}" ;;
     p) policy_filter="${OPTARG}" ;;
     s) server_filter="${OPTARG}" ;;
+    z) zombie_servers='true';;
     *) error "Unexpected option ${flag}" ;;
   esac
 done
@@ -38,6 +54,7 @@ done
 policy_id=$(curl -X GET "https://api.newrelic.com/v2/alerts_policies.json" -H "X-Api-Key:$api_key" -s -G -d "filter[name]=$policy_filter" | jq  '.policies[] | .id')
 entity_id=$(curl -X GET "https://api.newrelic.com/v2/servers.json" -H "X-Api-Key:$api_key" -s -G -d "filter[name]=$server_filter" | jq '.servers[] | .id')
 condition_id=$(curl -X GET "https://api.newrelic.com/v2/alerts_conditions.json" -H "X-Api-Key:$api_key" -s -G -d "policy_id=$policy_id" | jq '.conditions[] | .id')
+zombie_servers=$(curl -X GET 'https://api.newrelic.com/v2/servers.json' -H 'X-Api-Key:$api_key' -s -G -d 'filter[name]=$server_filter' | jq '.servers[] | select(.reporting==false) | .id')
 
 if [ "$add" == "true" ]; then
     for i in $condition_id; do
@@ -46,6 +63,10 @@ if [ "$add" == "true" ]; then
 elif [ "$delete" == "true" ]; then
     for i in $condition_id; do
         curl -X DELETE "https://api.newrelic.com/v2/alerts_entity_conditions/$entity_id.json" -H "X-Api-Key:$api_key" -s -G -d "entity_type=Server&condition_id=$i"
+    done
+elif [ "$zombie" == "true" ]; then
+    for i in $zombie_servers; do
+        curl -X DELETE "https://api.newrelic.com/v2/servers/$i.json" -H "X-Api-Key:$api_key" -s
     done
 else
     echo "nothing to report"
