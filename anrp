@@ -16,45 +16,27 @@ Example: anrp -a -A [apikey] -p [poliyname] -s [servername]
 "
 }
 
-function jumpto
-{
-    label=$1
-    cmd=$(sed -n "/$label:/{:a;n;p;ba};" $0 | grep -v ':$')
-    eval "$cmd"
-    exit
-}
-
-# if -z is selected skip initial checks
-if [ $# == "-z" ]; then 
-    jumpto continue
-fi
-# if less than four arguments supplied, display usage
-if [ $# -le 4 ]; then display_usage
-    exit 1
-fi
 # check whether user had supplied -h, if yes display usage
+
 if [ $# == "-h" ]; then display_usage
     exit 0
 fi
-
-continue:
-
-while getopts 'adA:p:s:' flag; do
-  case "${flag}" in
-    a) add='true' ;;
-    d) delete='true' ;;
-    A) api_key="${OPTARG}" ;;
-    p) policy_filter="${OPTARG}" ;;
-    s) server_filter="${OPTARG}" ;;
-    z) zombie_servers='true';;
-    *) error "Unexpected option ${flag}" ;;
-  esac
-done
+    while getopts 'adzA:p:s:' flag; do
+      case "${flag}" in
+        a) add='true' ;;
+        d) delete='true' ;;
+        A) api_key="${OPTARG}" ;;
+        p) policy_filter="${OPTARG}" ;;
+        s) server_filter="${OPTARG}" ;;
+        z) zombie='true';;
+        *) error "Unexpected option ${flag}" ;;
+      esac
+    done
 
 policy_id=$(curl -X GET "https://api.newrelic.com/v2/alerts_policies.json" -H "X-Api-Key:$api_key" -s -G -d "filter[name]=$policy_filter" | jq  '.policies[] | .id')
 entity_id=$(curl -X GET "https://api.newrelic.com/v2/servers.json" -H "X-Api-Key:$api_key" -s -G -d "filter[name]=$server_filter" | jq '.servers[] | .id')
 condition_id=$(curl -X GET "https://api.newrelic.com/v2/alerts_conditions.json" -H "X-Api-Key:$api_key" -s -G -d "policy_id=$policy_id" | jq '.conditions[] | .id')
-zombie_servers=$(curl -X GET 'https://api.newrelic.com/v2/servers.json' -H 'X-Api-Key:$api_key' -s -G -d 'filter[name]=$server_filter' | jq '.servers[] | select(.reporting==false) | .id')
+zombie_servers=$(curl -X GET "https://api.newrelic.com/v2/servers.json" -H "X-Api-Key:$api_key" -s -G | jq '.servers[] | select(.reporting==false) | .id')
 
 if [ "$add" == "true" ]; then
     for i in $condition_id; do
