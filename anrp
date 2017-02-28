@@ -38,6 +38,21 @@ entity_id=$(curl -X GET "https://api.newrelic.com/v2/servers.json" -H "X-Api-Key
 condition_id=$(curl -X GET "https://api.newrelic.com/v2/alerts_conditions.json" -H "X-Api-Key:$api_key" -s -G -d "policy_id=$policy_id" | jq '.conditions[] | .id')
 zombie_servers=$(curl -X GET "https://api.newrelic.com/v2/servers.json" -H "X-Api-Key:$api_key" -s -G | jq '.servers[] | select(.reporting==false) | .id')
 
+i=0
+while [ "$entity_id" == "" ]; do
+    echo "waiting for $server_filter - $((i+1)) of 10";
+    entity_id=$(curl -X GET "https://api.newrelic.com/v2/servers.json" -H "X-Api-Key:$api_key" -s -G -d "filter[name]=$server_filter" | jq '.servers[] | .id')
+    sleep 12;
+    i=$((i+1))
+      if [ "$entity_id" != "" ]; then
+        break
+      elif
+        [ "$i" -eq 10 ]; then
+        echo "giving up";
+        exit 0
+      fi
+done
+
 if [ "$add" == "true" ]; then
     for i in $condition_id; do
         curl -X PUT "https://api.newrelic.com/v2/alerts_entity_conditions/$entity_id.json" -H "X-Api-Key:$api_key" -H "Content-Type: application/json" -s -G -d "entity_type=Server&condition_id=$i"
