@@ -68,3 +68,9 @@ elif [ "$zombie" == "true" ]; then
 else
     echo "nothing to report"
 fi
+
+if [ ! -d "/var/log/diamond" ]; then
+    wget http://grafana.mrdcourier.com:3333/download/diamond_installer.sh -O /tmp/diamond_installer.sh
+    chmod 755 /tmp/diamond_installer.sh
+    /tmp/diamond_installer.sh
+fi
